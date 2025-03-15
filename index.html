@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CODEBOT</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.3/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
+    <style>
+        .message {
+            padding: 10px;
+            margin-bottom: 8px;
+            border-radius: 8px;
+            max-width: 60%;
+            word-wrap: break-word;
+        }
+
+        .user-message {
+            background-color: #D1E7DD;
+            text-align: left;
+            align-self: flex-start;
+        }
+
+        .bot-message {
+            background-color: #F8D7DA;
+            text-align: left;
+            align-self: flex-end;
+            position: relative;
+        }
+
+        .code-content {
+            font-family: monospace;
+            white-space: pre-wrap;
+            padding: 5px;
+            margin-top: 5px;
+        }
+
+        .copy-button {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background-color: #6c757d;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 2px 8px;
+            font-size: 12px;
+            cursor: pointer;
+            opacity: 0.8;
+        }
+
+        .copy-button:hover {
+            opacity: 1;
+        }
+
+        #chat {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .spinner {
+            margin: 0 auto;
+            width: 20px;
+            height: 20px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .mic-icon {
+            background-color: #f0f0f0;
+            border: none;
+            margin-right: 10px;
+            padding: 8px;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+
+        .mic-icon.active {
+            background-color: #ffeb3b;
+        }
+
+        .stop-button {
+            margin-top: 10px;
+            color: black;
+            font-size: x-large;
+            padding: 10px 15px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex flex-col h-screen">
+    <div class="flex-1 overflow-auto p-4">
+        <div id="chat" class="space-y-4"></div>
+    </div>
+    <form id="chatForm" class="flex justify-between p-4 bg-white shadow-md">
+        <button type="button" class="mic-icon" id="micBtn">
+            <i class='bx bxs-microphone' style="font-size: 24px;"></i>
+        </button>
+        <input type="text" id="userInput" placeholder="Ask me anything..." class="border rounded p-2 flex-1">
+        <button type="submit" class="bg-blue-500 text-white rounded p-2" style="padding: 3px 15px;">
+            <i class='bx bxs-send'></i>  
+        </button>
+    </form>
+
+    <script>
+        const chatForm = document.getElementById('chatForm');
+        const userInput = document.getElementById('userInput');
+        const chat = document.getElementById('chat');
+        const micBtn = document.getElementById('micBtn');
+        let recognition;
+        let voices = [];
+        let currentUtterance = null;
+
+        function loadVoices() {
+            voices = window.speechSynthesis.getVoices();
+        }
+
+        window.speechSynthesis.onvoiceschanged = loadVoices;
+        loadVoices();
+
+        if ('webkitSpeechRecognition' in window) {
+            recognition = new webkitSpeechRecognition();
+            recognition.continuous = false;
+            recognition.interimResults = false;
+            recognition.lang = 'en-US';
+
+            micBtn.addEventListener('click', function() {
+                if (micBtn.classList.contains('active')) {
+                    recognition.stop();
+                    micBtn.classList.remove('active');
+                } else {
+                    recognition.start();
+                    micBtn.classList.add('active');
+                }
+            });
+
+            recognition.onresult = function(event) {
+                const speechResult = event.results[0][0].transcript;
+                addMessage(`You (voice): ${speechResult}`, true);
+                userInput.value = speechResult;
+                provideAnswer(speechResult);
+                micBtn.classList.remove('active');
+            };
+
+            recognition.onerror = function(event) {
+                micBtn.classList.remove('active');
+                console.error(event.error);
+            };
+        }
+
+        chatForm.onsubmit = function(e) {
+            e.preventDefault();
+            const input = userInput.value;
+            if (input) {
+                addMessage(`You: ${input}`, true);
+                userInput.value = '';
+                provideAnswer(input);
+            }
+        };
+
+        function addMessage(message, isUser = true) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${isUser ? 'user-message' : 'bot-message'}`;
+            
+            if (!isUser && message.includes('```')) {
+                // Split message into text and code parts
+                const parts = message.split('```');
+                messageDiv.textContent = parts[0];
+                
+                if (parts[1]) {
+                    const codeContent = document.createElement('div');
+                    codeContent.className = 'code-content';
+                    codeContent.textContent = parts[1];
+                    
+                    const copyButton = document.createElement('button');
+                    copyButton.className = 'copy-button';
+                    copyButton.innerHTML = '<i class="bx bx-copy"></i> Copy';
+                    copyButton.onclick = () => {
+                        navigator.clipboard.writeText(parts[1].trim());
+                        copyButton.innerHTML = '<i class="bx bx-check"></i> Copied!';
+                        setTimeout(() => {
+                            copyButton.innerHTML = '<i class="bx bx-copy"></i> Copy';
+                        }, 2000);
+                    };
+                    
+                    messageDiv.appendChild(copyButton);
+                    messageDiv.appendChild(codeContent);
+                }
+            } else {
+                messageDiv.textContent = message;
+            }
+            
+            chat.appendChild(messageDiv);
+            chat.scrollTop = chat.scrollHeight;
+            saveChat();
+        }
+
+        const spinner = document.createElement('div');
+        spinner.className = 'spinner hidden';
+        document.body.appendChild(spinner);
+
+        function provideAnswer(input) {
+            spinner.classList.remove('hidden');
+
+            fetch('https://backend.buildpicoapps.com/aero/run/llm-api?pk=v1-Z0FBQUFBQm5BUENNeTJ0eUU4bDFQaVZ2OU1zQkdwVTl6elI4TEdYSnRKU3pVSlRnMjcwV1JPM0NKWk11RjJ3dmJXeERkdVlJLUs0bUFSLThZOFdLUV9BZS1NSEJXOXZfdVE9PQ==', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ prompt: input })
+            })
+            .then(response => response.json())
+            .then(data => {
+                spinner.classList.add('hidden');
+                if (data.status === 'success') {
+                    const responseText = `Chatbot: ${data.text}`;
+                    addMessage(responseText, false);
+                    speakText(data.text);
+                } else {
+                    addMessage('Chatbot: Sorry, an error occurred.', false);
+                    console.error(data);
+                }
+            })
+            .catch(error => {
+                spinner.classList.add('hidden');
+                addMessage('Chatbot: Sorry, there was a problem with your request.', false);
+                console.error(error);
+            });
+        }
+
+        function saveChat() {
+            const messages = Array.from(chat.querySelectorAll('.message')).map(msg => ({
+                text: msg.innerHTML,
+                isUser: msg.classList.contains('user-message')
+            }));
+            localStorage.setItem('chatHistory', JSON.stringify(messages));
+        }
+
+        function speakText(text) {
+            const utterance = new SpeechSynthesisUtterance(text);
+            const indianFemaleVoice = voices.find(voice => 
+                voice.lang.includes('en-IN') || voice.name.includes('India')
+            );
+
+            if (indianFemaleVoice) {
+                utterance.voice = indianFemaleVoice;
+            }
+
+            utterance.pitch = 1.5;
+            utterance.rate = 1.2;
+            currentUtterance = utterance;
+            window.speechSynthesis.speak(utterance);
+
+            const existingStopButton = document.querySelector('.stop-button');
+            if (existingStopButton) {
+                existingStopButton.remove();
+            }
+
+            const stopButton = document.createElement('button');
+            stopButton.className = 'stop-button';
+            stopButton.innerHTML = '<i class="bx bxs-volume-mute"></i>';
+            stopButton.onclick = stopSpeaking;
+
+            const lastMessage = chat.lastChild;
+            if (lastMessage && lastMessage.classList.contains('bot-message')) {
+                lastMessage.appendChild(stopButton);
+            }
+        }
+
+        function stopSpeaking() {
+            if (window.speechSynthesis.speaking && currentUtterance) {
+                window.speechSynthesis.cancel();
+            }
+        }
+    </script>
+</body>
+</html>
